@@ -10,7 +10,7 @@
 
 ### Plugin
 
-> Plugin是插件，给予时间流框架Tapable，插件可以扩展Webpack的功能，在Webpack运行生命周期中会广播出许多事件，Plugin通过监听这些事件，在合适的时机通过Webpack提供的API改变输出的结果
+> Plugin是插件，给予事件流框架Tapable，插件可以扩展Webpack的功能，在Webpack运行生命周期中会广播出许多事件，Plugin通过监听这些事件，在合适的时机通过Webpack提供的API改变输出的结果
 >
 > 在module.plugins中配置，类型为数组，每一项都是Plugin的实例，参数通过构造函数传入
 
