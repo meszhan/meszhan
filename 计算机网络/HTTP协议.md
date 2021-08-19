@@ -28,7 +28,7 @@
 
 #### 二进制分帧
 
-> 帧时数据传输的最小单位，用二进制代替明文擦婚书，将报文message划分为frame
+> 帧时数据传输的最小单位，用二进制代替明文传输，将报文message划分为frame
 >
 > + strict-transport-security：max-age=63072000;includeSubdomains字段是服务器开启HSTS策略，让浏览器强制使用HTTPS进行通信，减少重定向造成的额外请求和会话劫持风险
 > + 服务器开启 HSTS 的方法是: 以 nginx 为例，在相应站点的 server 模块中添加 `add_header Strict-Transport-Security "max-age=63072000; includeSubdomains" always;` 即可

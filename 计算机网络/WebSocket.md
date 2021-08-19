@@ -150,7 +150,7 @@ console.log(secWebSocketAccept);
 
 ### 数据帧格式
 
-> 客户端、服务端数据的交换，离不开数据帧格式的定义，因此我们需要了解依稀WebSocket的数据帧格式
+> 客户端、服务端数据的交换，离不开数据帧格式的定义，因此我们需要了解一些WebSocket的数据帧格式
 >
 > WebSocket客户端、服务端通信的最小单位是帧frame，由1个或多个帧组成一条完整message
 

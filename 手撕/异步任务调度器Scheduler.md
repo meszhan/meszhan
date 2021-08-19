@@ -12,7 +12,7 @@ class Scheduler {
     }
 
     addTask(fn) {
-        if (!this.tryCount.get(fn)) {
+        if (!this.tryCount.has(fn)) {
             this.tryCount.set(fn, 0);
         }
         if (this.runningTasks.length >= this.limit) {

@@ -22,7 +22,7 @@
 >
 > 比如你在某银行站点bank.com转账，转账完成后没有退出站点，又访问了一个恶意网站，在该网站上隐藏了一个转账的表单，通过某个按钮来吸引点击提交表单或者使用JavaScript自动提交，尽管无法通过js直接盗用cookie，但是向某一个网站发送请求的时候会被自动发送
 >
-> 如果将JWT通过HTTP header发送给服务端而不是cookie自动发送，可以有效的防护CSRF。服务端代码在完成认证后，在HTTP response的header中国返回JWT，前端将JWT存储在localStorage中火HttpOnly为false的cookie
+> 如果将JWT通过HTTP header发送给服务端而不是cookie自动发送，可以有效的防护CSRF。服务端代码在完成认证后，在HTTP response的header中返回JWT，前端将JWT存储在localStorage中或HttpOnly为false的cookie
 >
 > 发送请求时，取出JWT，通过header发送给服务端通过认证。但是这对于XSS攻击太友好了，它可以直接通过JavaScript访问JWT，然后通过表单发送到其他站点
 
