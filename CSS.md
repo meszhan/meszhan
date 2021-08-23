@@ -2,7 +2,122 @@
 
 ### 水平垂直居中
 
-### transform和transition
+### transform、transition、animation
+
+#### transition
+
+用于设置元素的样式过渡，元素从某个属性的值过渡到这个属性的另一个值，是单个属性的状态转变，但是这种转变需要条件来触发。
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>transition</title>
+  <style>
+    #box {
+      height: 100px;
+      width: 100px;
+      background: green;
+      transition: transform 1s ease-in 1s;
+    }
+
+    #box:hover {
+      transform: rotate(180deg) scale(.5, .5);
+    }
+  </style>
+</head>
+<body>
+  <div id="box"></div>
+</body>
+</html>
+```
+
+在上述样式中，我们为transition设置了transform属性的过渡，并由hover事件触发，transition属性从左到右分别对应了
+
++ transition-property：过渡的属性
++ transition-duration：过渡花费的时间，注意如果不指定过渡时间，transition没有效果，因为默认为0
++ transition-timing-function：过渡效果的时间曲线
++ transition-delay：过渡延时
+
+多项transition属性设置
+
+```css
+div
+{
+transition: width 2s, height 2s, transform 2s;
+-webkit-transition: width 2s, height 2s, -webkit-transform 2s;
+}  
+```
+
+##### 缺点
+
++ 需要特定的事件触发，例如hover、focus、checked，不能在网页加载时自动发生
++ 一次性过渡，不能重复发生，除非重复触发
++ 只能定义开始和结束状态，不能定义中间状态，也就是只有两个状态
+
+#### animation
+
+animation是对transition属性的扩展，弥补了transition的很多不足之处，animation是由很多个transition效果的叠加，可操作性也更强
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <title>animation</title>
+  <style>
+    .box {
+      height: 100px;
+      width: 100px;
+      border: 15px solid black;
+      animation: changebox 1s ease-in-out 1s infinite alternate running forwards;
+    }
+
+    .box:hover {
+      animation-play-state: paused;
+    }
+
+    @keyframes changebox {
+      10% {
+        background: red;
+      }
+      50% {
+        width: 80px;
+      }
+      70% {
+        border: 15px solid yellow;
+      }
+      100% {
+        width: 180px;
+        height: 180px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="box"></div>
+</body>
+
+</html>
+```
+
+上述由@keyframes定义了一个关键帧动画，百分比定义了在动画时间到达某个百分比的时候发生什么变化
+
+animation属性的拆解：
+
++ Animation-name： 调用keyframes定义的动画，必须与keyframes名称一致
++ Animation-duration：动画持续时间
++ animation-timing-function：速度效果的速度曲线
++ animation-delay：动画延时多久开始
++ animation-iteration-count：动画播放次数，可以设置为infinite无限播放
++ animation-direction：动画播放方向，normal（时间轴顺序）、reverse（反序）、alternate（轮流，来回往复进行）、alternate（反序交替）
++ animation-play-state：动画播放状态，控制动画的暂停和继续，running继续、paused暂停
++ animation-fill-mode：动画结束后元素的样式，none（回到动画没开始时的状态）、forwards（停留在动画结束时的状态）、backwards（回到第一帧的状态）、both（轮流应用forwards和backwards）
+
+##### 优点
+
++ keyframes提供了更多的控制
 
 ### 选择器和优先级
 
@@ -349,6 +464,104 @@ BFC是一个完全独立的空间，让空间里的子元素不会影响到外�
     }
 </style>
 ```
+
+### CSS GPU硬件加速——Web性能优化
+
+https://fed.taobao.org/blog/2016/04/26/performance-composite/
+
+CSS硬件加速又叫做GPU加速，利用GPU进行渲染，从而减少CPU操作进行优化的方案。由于GPU中的transform等CSS属性不会触发repaint，所以可以提高网页性能。
+
+#### 动画与帧
+
+![](https://lz5z.com/assets/img/css3_gpu_speedup.png)
+
+上面大概描述了浏览器在每一帧内做的事情：
+
++ JavaScript：一般来说我们可能性会使用JavaScript实现一些动画效果和DOM操作，这些操作会影响到页面布局
++ Style计算样式：根据CSS选择器，对每个DOM元素匹配对应的CSS样式，确定每个DOM元素的CSS样式规则
++ Layout布局：计算每个元素最终在屏幕上显示的大小和位置。因为页面上的元素布局是相对的，所以任意一个元素的位置发生变化，都会导致其他元素发生变化，也就是回流或重排。例如父元素的宽度会影响到子元素的宽度甚至是更深层的元素布局
++ Paint绘制：填充像素，在多个层上绘制元素的文字、颜色、图像和边框等，即一个DOM元素的所有可视效果，这个绘制过程会在多个层上完成
++ Composite渲染层合并：因为DOM元素的绘制是在多个层上进行的，在所有层都完成绘制后，浏览器会按照合理的顺序合并图层然后显示到屏幕上，对于有位置重叠的元素的页面，一旦合并顺序出错，会导致元素显示异常
+
+#### 浏览器渲染原理
+
+在浏览器中，页面内容是存储为由 Node 对象组成的树状结构，也就是 DOM 树。每一个 HTML element 元素都有一个 Node 对象与之对应，DOM 树的根节点永远都是 Document Node。
+
+![](https://img.alicdn.com/tps/TB1VFRDMXXXXXahXpXXXXXXXXXX-814-320.png_720x720.jpg#alt=)
+
+##### 从Nodes到LayoutObjects
+
+DOM树中的每个Node节点都有对应的LayoutObject，LayoutObject描述了如何在屏幕上绘制节点内容
+
+##### 从 LayoutObjects 到 PaintLayers
+
+一般来说，拥有相同的坐标空间的 LayoutObjects，属于同一个渲染层（PaintLayer）。PaintLayer 最初是用来实现 [stacking contest（层叠上下文）](https://developer.mozilla.org/zh-CN/docs/Web/Guide/CSS/Understanding_z_index/The_stacking_context)，以此来保证页面元素以正确的顺序合成（composite），这样才能正确的展示元素的重叠以及半透明元素等等。因此满足形成层叠上下文条件的 LayoutObject 一定会为其创建新的渲染层，当然还有其他的一些特殊情况，为一些特殊的 LayoutObjects 创建一个新的渲染层，比如 `overflow != visible` 的元素。根据创建 PaintLayer 的原因不同，可以将其分为常见的 3 类：
+
+- NormalPaintLayer
+  - 根元素（HTML）
+  - 有明确的定位属性（relative、fixed、sticky、absolute）
+  - 透明的（opacity 小于 1）
+  - 有 CSS 滤镜（fliter）
+  - 有 CSS mask 属性
+  - 有 CSS mix-blend-mode 属性（不为 normal）
+  - 有 CSS transform 属性（不为 none）
+  - backface-visibility 属性为 hidden
+  - 有 CSS reflection 属性
+  - 有 CSS column-count 属性（不为 auto）或者 有 CSS column-width 属性（不为 auto）
+  - 当前有对于 opacity、transform、fliter、backdrop-filter 应用动画
+
+- OverflowClipPaintLayer
+  - overflow 不为 visible
+
+- NoPaintLayer
+  - 不需要 paint 的 PaintLayer，比如一个没有视觉属性（背景、颜色、阴影等）的空 div。
+
+满足以上条件的 LayoutObject 会拥有独立的渲染层，而其他的 LayoutObject 则和其第一个拥有渲染层的父元素共用一个。
+
+#### 动画与图层
+
+浏览器在获取render tree后，渲染树中包含大量的渲染元素，每个渲染元素被分到一个图层中，每个图层都会被加载到GPU形成渲染纹理。GPU中的transform不会触发repaint，最终使用transform的图层会由独立的合成器进程进行处理
+
+渲染过程：
+
++ 生成render tree
++ 渲染元素
++ 图层
++ GPU渲染
++ 浏览器复合图层
++ 生成最终的屏幕图像
+
+<img src="https://lz5z.com/assets/img/css3_gpu_lauer_borders.png" style="zoom:50%;" />
+
+在GPU渲染过程中，一些元素因为符合某些规则，被提升为独立的层，独立出来之后，就不会影响到其它DOM的布局，所以我们可以将经常变换的DOM主动提升到独立的层，就可以在浏览器的一帧运行中，减少Layout和Paint的时间。
+
+#### 创建独立图层
+
++ transform属性
++ video元素
++ WebGL或canvas
++ Flash
++ opacity动画
+
+#### 开启GPU加速
+
++ transform
++ opacity
++ filter
++ will-change
+
+#### 问题
+
++ 开启过多的硬件加速会耗费更多的内存
++ GPU渲染会影响字体的抗锯齿效果，因为CPU和GPU有不同的渲染机制
+
+
+
+
+
+
+
+
 
 
 
