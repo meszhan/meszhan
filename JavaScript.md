@@ -2,6 +2,317 @@
 
 ## 语法型面试题
 
+### JSON.stringify的真正用法
+
+https://juejin.cn/post/6844904016212672519
+
+#### 特性一
+
+对于undefined、任意函数以及symbol三个特殊值分别作为对象属性值、数组元素、单独的值时返回不同的结果
+
+##### 作为对象属性值
+
+```javascript
+const data = {
+  a: "aaa",
+  b: undefined,
+  c: Symbol("dd"),
+  fn: function() {
+    return true;
+  }
+};
+JSON.stringify(data); // 输出：？
+
+// "{"a":"aaa"}"
+```
+
+undefined、任意函数以及symbol作为对象属性值时stringify将跳过它们进行序列化
+
+##### 作为数组元素
+
+```
+JSON.stringify(["aaa", undefined, function aa() {
+    return true
+  }, Symbol('dd')])  // 输出：？
+
+// "["aaa",null,null,null]"
+```
+
+undefined、任意函数以及symbol作为数组元素时stringify将它们序列化为null
+
+##### 单独序列化
+
+```javascript
+JSON.stringify(function a (){console.log('a')})
+// undefined
+JSON.stringify(undefined)
+// undefined
+JSON.stringify(Symbol('dd'))
+// undefined
+```
+
+undefined、任意函数以及symbol作为单独的值进行序列化是时stringify将它们序列化为undefined
+
+#### 特性二
+
+非数组对象的属性不能保证以特定顺序出现在序列化后的字符串中
+
+```javascript
+const data = {
+  a: "aaa",
+  b: undefined,
+  c: Symbol("dd"),
+  fn: function() {
+    return true;
+  },
+  d: "ddd"
+};
+JSON.stringify(data); // 输出：？
+// "{"a":"aaa","d":"ddd"}"
+
+JSON.stringify(["aaa", undefined, function aa() {
+    return true
+  }, Symbol('dd'),"eee"])  // 输出：？
+
+// "["aaa",null,null,null,"eee"]"
+```
+
+因为stringify序列化时会忽略一些特殊的值，所以不能保证序列化后的字符串以特定顺序出现
+
+#### 特性三
+
+转换值如果有toJSON函数，该函数返回什么值，序列化的结果就是什么值，并且忽略其他属性值
+
+```javascript
+JSON.stringify({
+    say: "hello JSON.stringify",
+    toJSON: function() {
+      return "today i learn";
+    }
+  })
+// "today i learn"
+```
+
+#### 特性四
+
+JSON.stringify会正常序列化Date类型的值
+
+```javascript
+JSON.stringify({ now: new Date() });
+// "{"now":"2019-12-08T07:42:11.973Z"}"
+```
+
+#### 特性五
+
+NaN和Infinity格式的数值及null都会被当作null
+
+```javascript
+JSON.stringify(NaN)
+// "null"
+JSON.stringify(null)
+// "null"
+JSON.stringify(Infinity)
+// "null"
+```
+
+#### 特性六
+
+布尔值、数字、字符串的包装对象在序列化过程中会自动转为对应的原始值
+
+```javascript
+JSON.stringify([new Number(1), new String("false"), new Boolean(false)]);
+// "[1,"false",false]"
+```
+
+#### 特性七
+
+其他类型的对象，例如Map/Set/WeakMap/WeakSet，只会序列化可枚举的属性
+
+```javascript
+// 不可枚举的属性默认会被忽略：
+JSON.stringify( 
+    Object.create(
+        null, 
+        { 
+            x: { value: 'json', enumerable: false }, 
+            y: { value: 'stringify', enumerable: true } 
+        }
+    )
+);
+// "{"y":"stringify"}"
+```
+
+#### 特性八
+
+我们经常会用到stringify实现深拷贝，但是对于循环引用问题，stringify无法处理从而报错
+
+```javascript
+// 对包含循环引用的对象（对象之间相互引用，形成无限循环）执行此方法，会抛出错误。 
+const obj = {
+  name: "loopObj"
+};
+const loopObj = {
+  obj
+};
+// 对象之间形成循环引用，形成闭环
+obj.loopObj = loopObj;
+
+// 封装一个深拷贝的函数
+function deepClone(obj) {
+  return JSON.parse(JSON.stringify(obj));
+}
+// 执行深拷贝，抛出错误
+deepClone(obj)
+/**
+ VM44:9 Uncaught TypeError: Converting circular structure to JSON
+    --> starting at object with constructor 'Object'
+    |     property 'loopObj' -> object with constructor 'Object'
+    --- property 'obj' closes the circle
+    at JSON.stringify (<anonymous>)
+    at deepClone (<anonymous>:9:26)
+    at <anonymous>:11:13
+ */
+```
+
+#### 特性九
+
+所有以Symbol为key的属性都会被忽略掉，即使repalcer参数中强制指定包含它们
+
+```javascript
+JSON.stringify({ [Symbol.for("json")]: "stringify" }, function(k, v) {
+    if (typeof k === "symbol") {
+      return v;
+    }
+  })
+
+// undefined
+```
+
+replacer是stringify的第二个参数
+
+#### 第二个参数replacer
+
+replacer参数有两种形式，可以是一个函数或数组。作为函数时，有两个参数key和value，函数类似于map和filter等数组方法的回调函数，对每一个属性值都执行一次该函数。如果replacer是一个数组，数组的值将被序列化为JSON字符串的属性名
+
+##### 打破九大特性的大多数特性
+
+```javascript
+const data = {
+  a: "aaa",
+  b: undefined,
+  c: Symbol("dd"),
+  fn: function() {
+    return true;
+  }
+};
+// 不用 replacer 参数时
+JSON.stringify(data); 
+
+// "{"a":"aaa"}"
+// 使用 replacer 参数作为函数时
+JSON.stringify(data, (key, value) => {
+  switch (true) {
+    case typeof value === "undefined":
+      return "undefined";
+    case typeof value === "symbol":
+      return value.toString();
+    case typeof value === "function":
+      return value.toString();
+    default:
+      break;
+  }
+  return value;
+})
+// "{"a":"aaa","b":"undefined","c":"Symbol(dd)","fn":"function() {\n    return true;\n  }"}"
+```
+
+replacer被传入函数时，第一个参数不是对象的第一个键值对，而是空字符串作为key值，value值是整个对象的键值对
+
+```javascript
+const data = {
+  a: 2,
+  b: 3,
+  c: 4,
+  d: 5
+};
+JSON.stringify(data, (key, value) => {
+  console.log(value);
+  return value;
+})
+// 第一个被传入 replacer 函数的是 {"":{a: 2, b: 3, c: 4, d: 5}}
+// {a: 2, b: 3, c: 4, d: 5}   
+// 2
+// 3
+// 4
+// 5
+```
+
+##### 实现对象的map函数
+
+```javascript
+// 实现一个 map 函数
+const data = {
+  a: 2,
+  b: 3,
+  c: 4,
+  d: 5
+};
+const objMap = (obj, fn) => {
+  if (typeof fn !== "function") {
+    throw new TypeError(`${fn} is not a function !`);
+  }
+  return JSON.parse(JSON.stringify(obj, fn));
+};
+objMap(data, (key, value) => {
+  if (value % 2 === 0) {
+    return value / 2;
+  }
+  return value;
+});
+// {a: 1, b: 3, c: 2, d: 5}
+```
+
+replacer作为数组时，数组的值就代表了将被序列化为JSON字符串的属性名
+
+```javascript
+const jsonObj = {
+  name: "JSON.stringify",
+  params: "obj,replacer,space"
+};
+
+// 只保留 params 属性的值
+JSON.stringify(jsonObj, ["params"]);
+// "{"params":"obj,replacer,space"}" 
+```
+
+#### 第三个参数space
+
+space参数用来控制结果字符串里的间距
+
+```javascript
+const tiedan = {
+  name: "弹铁蛋同学",
+  describe: "今天在学 JSON.stringify()",
+  emotion: "like shit"
+};
+JSON.stringify(tiedan, null, "🐷");
+// 接下来是输出结果
+// "{
+// 🐷"name": "弹铁蛋同学",
+// 🐷"describe": "今天在学 JSON.stringify()",
+// 🐷"emotion": "like shit"
+// }"
+JSON.stringify(tiedan, null, 2);
+// "{
+//   "name": "弹铁蛋同学",
+//   "describe": "今天在学 JSON.stringify()",
+//   "emotion": "like shit"
+// }"
+```
+
++ space如果是数字，会在序列化时，每一级别比上一级别多这个数字的空格数量，最多10个空格
++ space如果是字符串，每一级别比上一级别多缩进该字符串或该字符串的前10个字符
+
 ### null和undefined的区别
 
 首先，null和undefined都是基本数据类型，即使typeof不这么认为
@@ -68,58 +379,6 @@ console.log(typeof null) // 'object'
 + JavaScript中的值是由一个表示类型的标签和实际数据值决定的，因为null代表空指针，为0x00，
 
   null的类型标签为0，与对象的类型标签为0相同，会被识别为object
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 ### 绑定this的方法
 
@@ -203,9 +462,9 @@ a.func2(); // Cherry
 
 箭头函数的这种行为与我们寻常了解到的setTimeout回调函数内部的this完全不同，寻常的setTimeout回调函数内部的this都会指向window或global，但是箭头函数因为在定义时指定this，它会捕获func2函数内部的this
 
-### 在函数内部使用_this或that
+#### 在函数内部使用_this或that
 
-> 利用_this或that可以很轻松的固定this，这一点在Axios等异步请求中非常有用，因为异步请求中有大量的回调，甚至是以前的回调地狱问题
+利用_this或that可以很轻松的固定this，这一点在Axios等异步请求中非常有用，因为异步请求中有大量的回调，甚至是以前的回调地狱问题
 
 ```javascript
 var name = "windowsName";
@@ -229,13 +488,13 @@ var a = {
 a.func2(); // Cherry
 ```
 
-### 区别
+#### 区别
 
 + call和apply只是传入的参数形式不同，call是参数列表，而apply是数组
 
 + call、apply和bind不同的是，前者返回执行的结果，而bind返回一个绑定了this的函数，不过需要说明的是，返回的函数仍然可以被绑定this到其他对象上
 
-### 测试
+#### 测试
 
 ```javascript
 const obj={
@@ -287,52 +546,6 @@ Function.prototype.myBind=function(){
 const myPrint=print.myBind(obj);
 print.myCall(null);
 ```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 ### new新建实例的原理
 
@@ -659,7 +872,7 @@ const a = require('/koala');
 console.log(a) // 打印为 {a : '程序员成长指北哦哦'}
 ```
 
-requir导出的内容时module.exports指向的内存，不是exports的
+require导出的内容是module.exports指向的内存，不是exports的
 
 #### 实际例子
 
@@ -827,6 +1040,8 @@ ele.obj = null
 + 无法解决循环引用问题
 
 #### V8对GC的优化
+
+https://juejin.cn/post/6981588276356317214
 
 ### 函数声明
 
@@ -1239,9 +1454,406 @@ func2(1, 2);
 #### 注意事项
 
 + 如果返回对象字面量，需要加括号，或用return返回，不能直接返回对象字面量，因为花括号会被解析为语句块而不是对象
-+ 
 
 ### JavaScript中的隐式转换
+
+先来看一道题
+
+```javascript
+const a = {
+  i: 1,
+  toString: function () {
+    return a.i++;
+  }
+}
+if (a == 1 && a == 2 && a == 3) {
+  console.log('hello world!');// 'hello world'
+}
+```
+
+为什么会出现上面的结果，明明并没有对a进行赋值，a却可以同时等于1、2、3
+
+#### 数据类型
+
++ 基本数据类型
+  + undefined
+  + null
+  + string
+  + number
+  + boolean
+  + symbol
+  + bigint
++ 复杂数据类型object
+  + Function
+  + Array
+  + RegExp
+  + Date
+  + 等
+
+#### 三种隐式转换类型
+
+Js中出现隐式转换最多的运算符是+和==
+
++ +因为既可以字符串想加，也可以数字相加，例如0+'1' ='01'
++ ==与===不同，它会在两边类型不同时，隐式的转换两边的数据
++ -*/这些运算符，因为只能针对number类型运算，所以所有数据的转换的结果都朝着number
+
+##### 三种隐式转换
+
++ 值转为原始值，ToPrimitive
++ 值转为数字，ToNumber
++ 值转为字符串，ToString
+
+#### ToPrimitive转为原始值
+
+```
+ToPrimitive(input, PreferredType?)
+```
+
+其中input是要转换的值，PreferredType是可选参数，既可以是number也可以是string，它只是一个转换标志，转换后的结果不一定是参数所指的类型，但转换结果一定是原始值或报错
+
+##### 标记为number
+
+1. 如果输入的值已经是一个原始值，则直接返回它
+2. 否则，如果输入的值是一个对象，则调用该对象的valueOf()方法，
+   如果valueOf()方法的返回值是一个原始值，则返回这个原始值。
+3. 否则，调用这个对象的toString()方法，如果toString()方法返回的是一个原始值，则返回这个原始值。
+4. 否则，抛出TypeError异常。
+
+##### 标记为string
+
+1. 如果输入的值已经是一个原始值，则直接返回它
+2. 否则，调用这个对象的toString()方法，如果toString()方法返回的是一个原始值，则返回这个原始值。
+3. 否则，如果输入的值是一个对象，则调用该对象的valueOf()方法，
+   如果valueOf()方法的返回值是一个原始值，则返回这个原始值。
+4. 否则，抛出TypeError异常。
+
+##### 默认表示
+
+因为PreferredType是可选参数，而我们日常的使用一般也不会使用到，因此它有自己的默认规则：
+
++ 对象为Date类型，PreferredType被设置为String
+
+  返回一个GMT格式的字符串
+
+```javascript
+console.log(new Date().toString());
+// Tue Aug 24 2021 09:35:32 GMT+0800 (China Standard Time) 
+```
+
++ 否则被设置为number
+
+#### valueOf和toString方法
+
+对象类型的数据一定存在valueOf方法和toString方法，因为它们被定义在原型链的最顶层Object.prototype（null除外）
+
+##### valueOf
+
+1. number、boolean、string三种构造函数生成的基础值的对象形式，通过valueOf会变成对应的原始值
+
+```javascript
+var num = new Number('123');
+num.valueOf(); // 123
+
+var str = new String('12df');
+str.valueOf(); // '12df'
+
+var bool = new Boolean('fd');
+bool.valueOf(); // true
+```
+
+2. 对于Date类型，valueOf返回毫秒时间戳
+
+```javascript
+var a = new Date();
+console.log(a.valueOf()); // 1629769189180
+```
+
+3. 除此之外，valueOf方法都会返回对象本身
+
+```javascript
+var a = new Array();
+console.log(a.valueOf() === a); // true
+
+var b = new Object({});
+console.log(b.valueOf() === b); // true
+```
+
+##### toString
+
+对于js常见的内置对象：Date、Array、Math、Number、Boolean、String、RegExp、Function
+
+这些对象都封装了自己的toString方法
+
+```javascript
+Number.prototype.hasOwnProperty('toString'); // true
+Boolean.prototype.hasOwnProperty('toString'); // true
+String.prototype.hasOwnProperty('toString'); // true
+Array.prototype.hasOwnProperty('toString'); // true
+Date.prototype.hasOwnProperty('toString'); // true
+RegExp.prototype.hasOwnProperty('toString'); // true
+Function.prototype.hasOwnProperty('toString'); // true
+
+var num = new Number('123sd');
+num.toString(); // 'NaN'
+
+var str = new String('12df');
+str.toString(); // '12df'
+
+var bool = new Boolean('fd');
+bool.toString(); // 'true'
+
+var arr = new Array(1,2);
+arr.toString(); // '1,2'
+
+var d = new Date();
+d.toString(); // "Wed Oct 11 2017 08:00:00 GMT+0800 (中国标准时间)"
+
+var func = function () {}
+func.toString(); // "function () {}"
+```
+
+除了上面的对象和通过Object实例化的对象外，其他对象都会返回该对象的类型
+
+```javascript
+var obj = new Object({});
+obj.toString(); // "[object Object]"
+
+Math.toString(); // "[object Math]"
+```
+
+上面的现象说明了，我们在判断对象的时候为什么不直接用对象本身的toString方法，而是要用Object.prototype.toString.call去调用，因为对象本身的toString方法很容易被重写
+
+#### ToNumber转为数字
+
++ undefined——》NaN
++ null——〉+0
++ 布尔值：true转1，false转0
++ 字符串：将字符串解析为数字，空字符串转为0
++ 对象：先进行ToPrimitive得到原始值，再进行ToNumber转为数字
+
+#### ToString转为字符串
+
++ undefined：'undefined'
++ null：'null'
++ 布尔值：转'true'或'false'
++ 数字：直接转
++ 对象：先进行ToPrimitive转为得到原始值，再进行toString转字符串
+
+##### 例子
+
+```javascript
+({} + {}) = ?
+  /**
+两个对象的值进行+运算符，肯定要先进行隐式转换为原始类型才能进行计算。
+1、进行ToPrimitive转换，由于没有指定PreferredType类型，{}会使默认值为Number，进行ToPrimitive(input, Number)运算。
+2、所以会执行valueOf方法，({}).valueOf(),返回的还是{}对象，不是原始值。
+3、继续执行toString方法，({}).toString(),返回"[object Object]"，是原始值。
+故得到最终的结果，"[object Object]" + "[object Object]" = "[object Object][object Object]"
+*/
+  
+* {} = ?
+  /**
+1、首先*运算符只能对number类型进行运算，故第一步就是对{}进行ToNumber类型转换。
+2、由于{}是对象类型，故先进行原始类型转换，ToPrimitive(input, Number)运算。
+3、所以会执行valueOf方法，({}).valueOf(),返回的还是{}对象，不是原始值。
+4、继续执行toString方法，({}).toString(),返回"[object Object]"，是原始值。
+5、转换为原始值后再进行ToNumber运算，"[object Object]"就转换为NaN。
+故最终的结果为 2 * NaN = NaN
+*/
+```
+
+#### ==隐式转换
+
+```javascript
+比较运算 x==y, 其中 x 和 y 是值，返回 true 或者 false。这样的比较按如下方式进行：
+
+1、若 Type(x) 与 Type(y) 相同， 则
+
+    1* 若 Type(x) 为 Undefined， 返回 true。
+    2* 若 Type(x) 为 Null， 返回 true。
+    3* 若 Type(x) 为 Number， 则
+  
+        (1)、若 x 为 NaN， 返回 false。
+        (2)、若 y 为 NaN， 返回 false。
+        (3)、若 x 与 y 为相等数值， 返回 true。
+        (4)、若 x 为 +0 且 y 为 −0， 返回 true。
+        (5)、若 x 为 −0 且 y 为 +0， 返回 true。
+        (6)、返回 false。
+        
+    4* 若 Type(x) 为 String, 则当 x 和 y 为完全相同的字符序列（长度相等且相同字符在相同位置）时返回 true。 否则， 返回 false。
+    5* 若 Type(x) 为 Boolean, 当 x 和 y 为同为 true 或者同为 false 时返回 true。 否则， 返回 false。
+    6*  当 x 和 y 为引用同一对象时返回 true。否则，返回 false。
+  
+2、若 x 为 null 且 y 为 undefined， 返回 true。
+3、若 x 为 undefined 且 y 为 null， 返回 true。
+4、若 Type(x) 为 Number 且 Type(y) 为 String，返回比较 x == ToNumber(y) 的结果。
+5、若 Type(x) 为 String 且 Type(y) 为 Number，返回比较 ToNumber(x) == y 的结果。
+6、若 Type(x) 为 Boolean， 返回比较 ToNumber(x) == y 的结果。
+7、若 Type(y) 为 Boolean， 返回比较 x == ToNumber(y) 的结果。
+8、若 Type(x) 为 String 或 Number，且 Type(y) 为 Object，返回比较 x == ToPrimitive(y) 的结果。
+9、若 Type(x) 为 Object 且 Type(y) 为 String 或 Number， 返回比较 ToPrimitive(x) == y 的结果。
+10、返回 false。
+```
+
++ x和y类型相同时，无类型转换，注意NaN不与任何值相等即可，NaN!==NaN
+
++ 不相同时
+  + x、y为number或string时，转换为number比较
+  + 有boolean类型时，boolean转为number比较
+  + 一个Object类型，一个string或number类型，将object类型转为原始值再比较
+
+##### 例子
+
+```javascript
+var a = {
+  valueOf: function () {
+     return 1;
+  },
+  toString: function () {
+     return '123'
+  }
+}
+true == a // true;
+首先，x与y类型不同，x为boolean类型，则进行ToNumber转换为1,为number类型。
+接着，x为number，y为object类型，对y进行原始转换，ToPrimitive(a, ?),没有指定转换类型，默认number类型。
+而后，ToPrimitive(a, Number)首先调用valueOf方法，返回1，得到原始类型1。
+最后 1 == 1， 返回true。
+```
+
+```javascript
+[] == !{}
+//
+1、! 运算符优先级高于==，故先进行！运算。
+2、!{}运算结果为false，结果变成 [] == false比较。
+3、根据上面第7条，等式右边y = ToNumber(false) = 0。结果变成 [] == 0。
+4、按照上面第9条，比较变成ToPrimitive([]) == 0。
+    按照上面规则进行原始值转换，[]会先调用valueOf函数，返回this。
+   不是原始值，继续调用toString方法，x = [].toString() = ''。
+   故结果为 '' == 0比较。
+5、根据上面第5条，等式左边x = ToNumber('') = 0。
+   所以结果变为： 0 == 0，返回true，比较结束。
+
+```
+
+```javascript
+const a = {
+  i: 1,
+  toString: function () {
+    return a.i++;
+  }
+}
+if (a == 1 && a == 2 && a == 3) {
+  console.log('hello world!');
+}
+```
+
+```javascript
+console.log(true + true); // 2
+console.log(new Date() - new Date()); // 0
+// 两个数组的引用地址不同
+console.log([1] == [1]); // false
+// 有时候{}会被识别为语句块而不是空对象
+console.log({}.valueOf());
+console.log(1 + {}); // 1[object object]
+console.log({} + 1); // [objet object]1
+```
+
+### 强制类型转换
+
+强转方式包括Number()、parseInt()、parseFloat()、toString()、String()、Boolean()
+
+#### Number
+
++ 布尔值，true转换为1，false转换为0
+
++ 数字返回自身。
+
++ null返回0
+
++ undefined返回NaN
+
++ 如果是字符串
+  + 如果字符串中只包含数字(或是0x/0X开头数字可以有正负)将其转换为十进制
+  + 如果字符串中包含有效的浮点格式，转化为浮点数
+  + 如果是空字符串，转换为0
+  + 如果不是以上的，返回NaN
+
++ 如果是Symbol，抛出错误
+
++ 如果是对象，并且部署了[Symbol.toPrimitive]，调用对象的valueOf()方法，然后根据前面的规则转换返回的值，如果转换的结果是NaN,那么调用对象的toString方法，再次按前面的顺序返回对应的值。
+
+```javascript
+Number(true);        // 1
+Number(false);       // 0
+Number('0111');      //111
+Number(null);        //0
+Number('');          //0
+Number('1a');        //NaN
+Number(-0X11);       //-17
+Number('0X11')       //17
+```
+
+#### Boolean类型
+
+Undefined、null、false、''、0、NaN都被转为false
+
+```javascript
+Boolean(0)          //false
+Boolean(null)       //false
+Boolean(undefined)  //false
+Boolean(NaN)        //false
+Boolean(1)          //true
+Boolean(13)         //true
+Boolean('a')       //true
+```
+
+#### parseInt()
+
+```javascript
+parseInt("1234blue");   //returns   1234
+parseInt("0xA");   //returns   10
+parseInt("22.5");   //returns   22
+parseInt("blue");   //returns   NaN
+```
+
+##### 设置进制
+
+```javascript
+parseInt("AF",   16);   //returns   175
+parseInt("10",   2);   //returns   2
+parseInt("10",   8);   //returns   8
+parseInt("10",   10);   //returns   10
+```
+
+#### parseFloat
+
+```javascript
+parseFloat("1234blue");   //returns   1234.0
+parseFloat("0xA");   //returns   NaN
+parseFloat("22.5");   //returns   22.5
+parseFloat("22.34.5");   //returns   22.34
+parseFloat("0908");   //returns   908
+parseFloat("blue");   //returns   NaN
+```
+
+#### 如何判定!x
+
+所有的!(假值)都是true，假值都是基本数据类型，分别有''、false、0、null、undefined、NaN，其他引用数据类型例如[]或{}都开辟了内存空间，都是真值，所以![]和!{}都为假
+
+```javascript
+// 都为true
+console.log(!'');
+console.log(!null);
+console.log(!undefined);
+console.log(typeof NaN);// number
+console.log(!NaN);
+console.log(!0);
+console.log(!false);
+// 都为false
+console.log(![]);
+console.log(!{});
+```
 
 ## 手撕型面试题
 
@@ -1382,6 +1994,122 @@ fn(3);
 + 鼠标不断点击触发，mousedown
 + 监听滚动事件
 
+### 深拷贝和浅拷贝
+
+#### 深拷贝
+
+##### JSON.parse和JSON.stringify
+
++ 不能复制正则、function、Symbol
++ 循环引用报错
++ 相同的引用会被重复复制：指向同一个对象的属性会被重复创建
+
+```javascript
+let obj = {         
+    reg : /^asd$/,
+    fun: function(){},
+    syb:Symbol('foo'),
+    asd:'asd'
+}; 
+let cp = JSON.parse(JSON.stringify(obj));
+```
+
+##### 递归属性
+
+```javascript
+const deepClone=function(obj){
+    const types={
+        'date':Date,
+        'regexp':RegExp
+    };
+    if(obj===null || typeof obj!=='object') return obj;
+    for(let key in types)
+        if(obj instanceof types[key])
+            return new types[key]();
+    let cloneObj=new obj.constructor();
+    for(let key in obj)
+        if(obj.hasOwnProperty(key))
+            cloneObj[key]=deepClone(obj[key]);
+    return cloneObj;
+}
+```
+
+##### lodash
+
+> _.cloneDeep
+
+```javascript
+const _=require('lodash');
+const obj1 = {
+    a: 1,
+    b: { f: { g: 1 } },
+    c: [1, 2, 3]
+};
+const obj2 = _.cloneDeep(obj1);
+console.log(obj1.b.f === obj2.b.f);// false
+```
+
+#### 浅拷贝
+
+##### Object.assign()
+
+> 可以把任意多个源对象的可枚举属性拷贝到目标对象然后返回
+
+```javascript
+let obj1 = { person: {name: "kobe", age: 41},sports:'basketball' };
+let obj2 = Object.assign({}, obj1);
+obj2.person.name = "wade";
+obj2.sports = 'football'
+console.log(obj1); // { person: { name: 'wade', age: 41 }, sports: 'basketball' }
+```
+
+##### lodash
+
+> _.clone
+
+```javascript
+var _ = require('lodash');
+var obj1 = {
+    a: 1,
+    b: { f: { g: 1 } },
+    c: [1, 2, 3]
+};
+var obj2 = _.clone(obj1);
+console.log(obj1.b.f === obj2.b.f);// true
+```
+
+##### 展开运算符
+
+```javascript
+let obj1 = { name: 'Kobe', address:{x:100,y:100}}
+let obj2= {... obj1}
+obj1.address.x = 200;
+obj1.name = 'wade'
+console.log('obj2',obj2) // obj2 { name: 'Kobe', address: { x: 200, y: 100 } }
+```
+
+##### Array.prototype.concat
+
+```javascript
+let arr = [1, 3, {
+    username: 'kobe'
+    }];
+let arr2 = arr.concat();    
+arr2[2].username = 'wade';
+console.log(arr); //[ 1, 3, { username: 'wade' } ]
+```
+
+##### Array.prototype.slice
+
+```javascript
+let arr = [1, 3, {
+    username: ' kobe'
+    }];
+let arr3 = arr.slice();
+arr3[2].username = 'wade'
+console.log(arr); // [ 1, 3, { username: 'wade' } ]
+```
+
 ## 区别型面试题
 
 ### Array.from与扩展运算符...的区别
@@ -1457,9 +2185,24 @@ let ArrayOf=function(){
 + 扩展运算符如果想把对象转为数组，这个对象必须实现iterator接口
 + Array.from可以兼容扩展运算符，并可以将类数组对象（有length属性）转为数组
 
+### 基本数据类型和引用数据类型
 
++ 对于基本类型来说，复制变量复制的是变量的值，与原来的变量并无关系；对于引用类型，复制变量只是复制引用地址而已，两者除了在栈中的地址不同之外，但指向的对象是同一个，因此修改会相互影响
++ 因为引用数据占据的空间会比较大且不固定，因此存储在堆内存中不会影响程序性能，但是引用数据的内存地址依然存储在栈中；基本类型的数据因为大小固定，存储在栈中
 
+## 细节问题
 
+####  for循环中能用const定义变量吗
+
+https://blog.biossun.xyz/variable-declarations-in-for-semantics/
+
+```javascript
+for(const i=0;i<5;i++){// Assignment to constant variable. 
+    console.log(i)
+}
+```
+
+从上面结果可以看出，不可以用const定义变量i这是因为i是常量，不可以有除初始化之外的赋值
 
 
 
