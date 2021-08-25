@@ -2,6 +2,107 @@
 
 ## 语法型面试题
 
+### 虚拟列表
+
+#### 为什么需要使用虚拟列表
+
+假设我们需要展示10000条记录，如果同时将10000条记录渲染到页面中，可以看看花费了多少时间
+
+```html
+<button id="button">button</button><br>
+<ul id="container"></ul>  
+```
+
+```javascript
+document.getElementById('button').addEventListener('click',function(){
+    // 记录任务开始时间
+    let now = Date.now();
+    // 插入一万条数据
+    const total = 10000;
+    // 获取容器
+    let ul = document.getElementById('container');
+    // 将数据插入容器中
+    for (let i = 0; i < total; i++) {
+        let li = document.createElement('li');
+        li.innerText = ~~(Math.random() * total)
+        ul.appendChild(li);
+    }
+    console.log('JS运行时间：',Date.now() - now);
+    setTimeout(()=>{
+      console.log('总运行时间：',Date.now() - now);
+    },0)
+
+    // print JS运行时间： 38
+    // print 总运行时间： 957 
+  })
+```
+
+在点击按钮时，会向页面中加入一万条记录，通过控制台输出，可以很明显观察到js运行时间和渲染完成的时间的差异
+
++ 在JS的事件循环中，当JS引擎所管理的主线程执行栈中的事件以及所有微任务事件全部执行完后才会触发渲染线程对页面进行渲染
++ 第一个console在页面渲染之前触发，得到的是大致的JS运行时间
++ 第二个console放在setTimeout中，在渲染完成后的下一次Event Loop中执行
+
+当然我们也可以打开Chrome的Performance分析工具查看，大部分下的时间开销都发生在
+
++ Recalculate Style：样式计算，浏览器根据css选择器计算哪些元素应该应用哪些规则，确定每个元素具体的样式
++ Layout：布局，知道哪些元素应用哪些规则后，浏览器开始计算它占据的空间大小和在屏幕上的位置
+
+#### 虚拟列表的定义
+
+https://juejin.cn/post/6844903982742110216
+
+虚拟列表：按需显示，只对可视区域进行渲染，对非可见区域中的数据不渲染或部分渲染，从而达到极高的渲染性能
+
+假设有10000条记录需要同时渲染，屏幕的可见区域高度为500px，列表项高度为50px，则我们此时在屏幕上最多只能看见10个列表项，那么在首次渲染时只需加载10条
+
+当滚动发生时，可以通过计算当前滚动值得到在屏幕可见区域应该显示的列表项
+
+假设滚动发生，滚动条距离顶部1500px，则我们可得知在可见区域内的列表项为第4到13项
+
+#### 实现
+
+虚拟列表的实现，就是在首屏记载的时候，只加载可视区域内列表项，当滚动时，动态计算获得可视区域内的列表项，并将不在可视区域内的列表项删除
+
++ 计算当前可视区域起始列表项索引startIndex
++ 计算结束列表项索引endIndex
++ 计算当前可视区域的数据，并渲染到页面中
++ 计算startIndex对应的数据在整个列表中的偏移位置
+
+因为是对可视区域进行渲染，所以为了保证列表容器高度并可以正常触发滚动，我们需要
+
+```html
+<div class="infinite-list-container">
+    <div class="infinite-list-phantom"></div>
+    <div class="infinite-list">
+      <!-- item-1 -->
+      <!-- item-2 -->
+      <!-- ...... -->
+      <!-- item-n -->
+    </div>
+</div>
+```
+
++ infinite-list-container为可视区域的容器
++ infinite-list-phantom为容器内的占位，高度为总列表高度，形成滚动条
++ infinite-list为列表项的渲染区域
+
+#### 列表项动态高度
+
+实际应用中，当列表项中包含文本之类的可变内容，会导致列表项的高度并不相同
+
+#### 面向未来
+
+前面我们使用了监听scroll事件的方式来触发可视区域中数据的更新，当滚动发生后，scroll事件会频繁触发，造成大量的重复计算
+
+可以使用IntersectionObserver替换监听scroll事件，IntersectionObserver可以监听目标元素是否出现在可视区域内，并在监听的回调事件中执行可视区域数据的更新，并且IntersectionObserver的监听回调函数是异步触发，不会随着目标元素的滚动触发，节约性能
+
+#### 遗留问题
+
+如果列表项中包含图片，并且列表高度会收到图片影响，因为图片会发送网络请求，因此无法保证在获取列表项真实高度时图片是否已经完成加载，导致计算不准确。
+
+可以使用ResizeObserver来监听列表项内容区域的高度改变，实时获取每一列表项的高度。
+
 ### JSON.stringify的真正用法
 
 https://juejin.cn/post/6844904016212672519
