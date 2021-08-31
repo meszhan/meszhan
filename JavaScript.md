@@ -2,6 +2,62 @@
 
 ## 语法型面试题
 
+### 原型和原型链
+
+每个构造函数constructor都有一个原型对象prototype，原型对象都包含一个指向构造函数的指针，而实例instance都包含一个指向原型对象是内部指针
+
+```javascript
+let Foo = function () {};
+
+console.log(Foo.prototype.constructor === Foo); // true
+
+let foo = new Foo();
+// proto是隐式原型，prototype是显式原型
+console.log(foo.__proto__ === Foo.prototype); // true
+```
+
+如果试图引用对象或实例instanhce的某个属性，会首先在对象内部寻找该属性，只至找不到，然后才在该对象的原型上去找该属性
+
+```javascript
+function Father() {
+  this.property = true;
+}
+Father.prototype.getFatherValue = function () {
+  return this.property;
+};
+function Son() {
+  this.sonProperty = false;
+}
+//继承 Father
+Son.prototype = new Father(); //Son.prototype被重写,导致Son.prototype.constructor也一同被重写
+console.log(Son.prototype.constructor)// Father
+Son.prototype.getSonVaule = function () {
+  return this.sonProperty;
+};
+var instance = new Son();
+console.log(instance.getFatherValue()); // true
+```
+
+#### 确定原型和实例的关系
+
+##### instanceof操作符
+
+```javascript
+console.log(instance instanceof Father);// true
+console.log(instance instanceof Son);// true
+console.log(instance instanceof Object);// true
+```
+
+##### isPrototypeOf方法
+
+```javascript
+console.log(Father.prototype.isPrototypeOf(instance));// true
+console.log(Son.prototype.isPrototypeOf(instance));// true
+console.log(Object.prototype.isPrototypeOf(instance));// true
+```
+
+![](https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/f9bb70f2afec41bdb7129721416367e4~tplv-k3u1fbpfcp-watermark.awebp)
+
 ### 虚拟列表
 
 #### 为什么需要使用虚拟列表
@@ -2293,7 +2349,7 @@ let ArrayOf=function(){
 
 ## 细节问题
 
-####  for循环中能用const定义变量吗
+###  for循环中能用const定义变量吗
 
 https://blog.biossun.xyz/variable-declarations-in-for-semantics/
 
@@ -2304,6 +2360,89 @@ for(const i=0;i<5;i++){// Assignment to constant variable. 
 ```
 
 从上面结果可以看出，不可以用const定义变量i这是因为i是常量，不可以有除初始化之外的赋值
+
+#### for语句规范
+
+在规范文档中，所有语句相关内容都定义在 *[第 13 章 Statements and Declarations](http://www.ecma-international.org/ecma-262/#sec-ecmascript-language-statements-and-declarations)* 中
+
+`for` 语句的执行逻辑定义在 [13.7.4.7 Runtime Semantics: LabelledEvaluation](http://www.ecma-international.org/ecma-262/6.0/#sec-for-statement-runtime-semantics-labelledevaluation) 这一节中。
+
+##### 使用var声明循环变量的for语句
+
+<img src="https://p2.biossun.xyz/blog/biossun/2021/01/1.png" style="zoom:50%;" />
+
++ 在使用var声明循环变量时，会直接在for语句所在的作用域中执行初始化表达式，循环变量自然就会被声明到该作用域中；
++ 若初始化表达式正常执行完
++ 开始执行循环体
+
+##### 使用let或const声明
+
+<img src="https://p2.biossun.xyz/blog/biossun/2021/01/2.png" style="zoom:50%;" />
+
++ 基于`for`语句所在的作用域创建一个新的子作用域，称为loopEnv
++ 在`loopEnv`创建所有循环变量
++ 将`loopEnv`设置为当前作用域
++ 在`loopEnv`中执行初始化表达式，为循环变量赋于初值
++ 执行循环体，并在执行结束后还原当前作用域
+
+在第10步时，如果使用`let`而非`const`声明循环变量，则会额外创建一个`perIterationLets`结构，其中会包含所有循环变量的绑定名称，该结构会连同其数据一并被传入循环体执行逻辑中。而在使用`cosnt`时，该结构被声明为空，和使用`var`声明循环变量时一样。
+
+##### `perIterationLets`结构的作用
+
+循环体执行逻辑
+
+<img src="https://p2.biossun.xyz/blog/biossun/2021/01/3.png" style="zoom:50%;" />
+
+可以看到在每次循环中，大体的处理逻辑就是：
+
++ 首先执行测试表达式，若返回`false`则退出循环
++ 执行循环体语句，根据执行结果判断是否退出循环
++ 最后执行增量表达式
+
+在循环开始之前，一起每次循环最后执行增量表达式之前，都会拿`perIterationLet`去执行一个创建每次迭代环境的逻辑
+
+<img src="https://p2.biossun.xyz/blog/biossun/2021/01/4.png" style="zoom:50%;" />
+
+这个逻辑的目的就是未来下次循环创建作用域环境
+
++ 若`perIterationLets`中有值，会基于当前作用域的父级创建一个新的子作用域，称为`interationEnv`
+
+  当前作用域在循环开始之前时`loopEnv`，在每次循环中最后执行增量表达式之前时，是当次循环对应的`interationEnv`，它们的父作用域就是for语句所在的作用域
+
++ 在`interationEnv`被创建之后，会根据`perIterationLets`在其中创建所有循环变量，并从当前作用域中复制循环变量的值
+
+这么做的目的就是为了在每次循环时，都会有一个单独的作用域用于绑定此次循环变量的值
+
+```javascript
+const array = ['a', 'b', 'c']
+
+for (let i = 0; i < array.length; i++) {
+	setTimeout(() => {
+		console.log(`for: index: ${i}, value: ${array[i]}`)
+	}, 100)
+}
+```
+
+<img src="https://p2.biossun.xyz/blog/biossun/2021/01/5.png" style="zoom:50%;" />
+
+如果`perIterationLets`为空，也就是在使用`var`或`const`声明循环变量时，则不会创建`interationEnv`。那么若是使用`var`声明循环变量，在整个循环语句执行过程中，当前作用域将一直都是for语句所在的作用域，若是使用`const`，则一直都是`loopEnv`
+
++ 使用`var`声明变量时，因为`var`只有函数作用域，因此for语句不需要再创建`interationEnv`来存放这些变量
++ 使用`const`时，因为常量值不可变，没必要创建`interationEnv`，仅需要提供一个`loopEnv`来存放
+
+#### `for-in`语句
+
+<img src="https://p2.biossun.xyz/blog/biossun/2021/01/6-1.png" style="zoom:50%;" />
+
+`for-in`和`for-of`的逻辑是一样的，都是先执行迭代表达式获取迭代器，然后执行循环体。循环体执行逻辑中的条件分支较多，但与循环变量声明类型相关的处理逻辑是在第g和h两步中
+
+<img src="https://p2.biossun.xyz/blog/biossun/2021/01/7-1.png" style="zoom:50%;" />
+
+若是使用`var`声明循环变量，或只是赋值给当前作用域中的某个变量，不会做额外的事情；但若是使用`let`或`const`声明循环变量，会为每次循环创建一个单独的作用域，其父级作用域为当前for语句所在的作用域环境。该作用域中会创建循环变量，并使用从迭代器中获取的下一个迭代项的值作为其初始值，在这个过程中并不会修改循环变量，因此可以在`for-of`语句中使用const声明循环变量
+
+#### 性能
+
+
 
 
 
