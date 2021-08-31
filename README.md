@@ -7,4 +7,8 @@
 + 2021-08-26
   + 重绘和回流
   + `for`循环中的`var`、`let`和`const`声明
++ 2021-08-31
+  + `JavaScript`的`Promise`补充
+  + `AMD`、`CMD`、`CommonJS`、`ESM`
+  + 更新京东和快手面经
 

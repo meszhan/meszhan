@@ -2,6 +2,336 @@
 
 ## 语法型面试题
 
+### AMD、CMD、CommonJS和ESM
+
+模块化的开发方式可以提高代码的复用率，方便进行代码的管理。通常一个文件就是一个模块，有自己的作用域，只会向外暴露特定的变量和函数。
+
+#### CommonJS
+
+Nodejs是CommonJS的主要实践者，四个环境变量为模块化的实现提供支持：`module`、`exports`、`require`、`global`。在实际使用时，用`module.exports`定义当前模块对外输出的接口，不推荐直接使用`exports`，用`require`加载模块。
+
+```javascript
+// 定义模块math.js
+let basicNum = 0;
+function add(a, b) {
+    return a + b;
+}
+module.exports = { //在这里写上需要向外暴露的函数、变量
+    add: add,
+    basicNum: basicNum,
+}
+
+// 引用自定义的模块时，参数包含路径，可省略.js
+var math = require('./math');
+console.log(math.add(2, 5));// 7
+
+// 引用核心模块时，不需要带路径
+var http = require('http');
+```
+
+CommonJS用同步的方式加载模块。在服务端，模块文件都存储在本地磁盘，读取非常快，所以没有问题。但是在浏览器端，因为网络原因，更适合使用异步加载。
+
+##### require重复引入的问题
+
+在使用require引入模块时，多个代码文件多次引入相同的模块会不会造成重复？
+
+Nodejs中默认先从缓存中加载模块，一个模块被加载一次之后，就会在缓存中维持一个副本，如果遇到重复加载的模块会直接提取缓存中的副本，在任何时候每个模块只在缓存中有一个实例
+
+##### require同步加载模块
+
++ 一个作为公共依赖的模块，最好一次性加载出来，同步更好
++ 模块的个数是有限的，而且Nodejs在require时会自动缓存已经加载的模块，再加上访问的都是本地文件，IO开销可以忽略
+
+##### require的缓存策略
+
+Nodejs会自动缓存require引入的文件，下次再引入不需要经过文件系统而是直接从缓存读取
+
+不过这种缓存式经过文件路径定位的，即使两个完全相同的文件，位于不同路径下，也会在缓存中维持两份
+
+```javascript
+// 可以通过以下获取缓存中的文件
+console.log(require.cache)
+```
+
+##### exports与module.exports的区别
+
+**js文件启动时**
+
+node执行一个文件时，会给这个文件生成一个exports和module对象，module有一个exports属性
+
+```javascript
+exports = module.exports = {};
+```
+
+**require加载模块**
+
+```javascript
+//koala.js
+let a = '程序员成长指北';
+
+console.log(module.exports); //能打印出结果为：{}
+console.log(exports); //能打印出结果为：{}
+
+exports.a = '程序员成长指北哦哦'; //这里辛苦劳作帮 module.exports 的内容给改成 {a : '程序员成长指北哦哦'}
+
+exports = '指向其他内存区'; //这里把exports的指向指走
+
+//test.js
+
+const a = require('/koala');
+console.log(a) // 打印为 {a : '程序员成长指北哦哦'}
+```
+
+require导出的内容是module.exports指向的内存，不是exports的
+
+#### 实际例子
+
+```javascript
+// ./a.js
+let count = 1;
+
+setCount = () => {
+    count++;
+}
+
+setTimeout(() => {
+    console.log('a', count)// a 2
+}, 1000);
+
+module.exports = {
+    count,
+    setCount
+}
+
+//b.js
+const obj = require('./a.js');
+
+obj.setCount();// count=2
+
+console.log('b', obj.count)// b 1
+
+setTimeout(() => {
+    console.log('b next', obj.count);
+}, 2000);
+```
+
++ 运行b模块时，先加载a模块，会执行setTimeout，到时间后把回调函数扔进宏任务队列
+
++ 调用setCount，这里注意，setCount内部改变的是a模块内部的count变量，因为count是普通类型，导出的是count的拷贝，因此即使将count增1，输出仍为1
+
++ 执行setTimeout，扔进队列
+
++ 执行a模块中的回调，输出count为2，因为setCount被调用了
+
++ 执行b模块中的回调，输出count为1，没有发生改变
+
+#### AMD和require.js
+
+AMD采用异步方式加载模块，模块的加载不影响后面语句的运行。所有依赖这个模块的语句都定义在一个回调函数中，在加载完成后，这个回调函数才会运行。这里主要使用require.js实现AMD规范的模块化。用`require.config`制定引用路径，用`define`定义模块，用`require`加载模块
+
+我们首先需要在网页中引入require.js和一个入口文件main.js，在main.js中配置`requir.config()`并规定项目中用到的基础模块
+
+```javascript
+/** 网页中引入require.js及main.js **/
+<script src="js/require.js" data-main="js/main"></script>
+
+/** main.js 入口文件/主模块 **/
+// 首先用config()指定各模块路径和引用名
+require.config({
+    baseUrl: "js/lib",
+    paths: {
+        "jquery": "jquery.min",  //实际路径为js/lib/jquery.min.js
+        "underscore": "underscore.min",
+    }
+});
+// 执行基本操作
+require(["jquery", "underscore"], function ($, _) {
+    // some code here
+});
+```
+
+引用模块的时候，将模块名放在`[]`中作为`require`的第一个参数；如果我们定义的模块本身也依赖其它模块，就需要将它们放在`[]`中作为`define`的第一个参数
+
+```javascript
+// 定义math.js模块
+define(function () {
+    var basicNum = 0;
+    var add = function (x, y) {
+        return x + y;
+    };
+    return {
+        add: add,
+        basicNum: basicNum
+    };
+});
+// 定义一个依赖underscore.js的模块
+define(['underscore'], function (_) {
+    var classify = function (list) {
+        _.countBy(list, function (num) {
+            return num > 30 ? 'old' : 'young';
+        })
+    };
+    return {
+        classify: classify
+    };
+})
+
+// 引用模块，将模块放在[]内
+require(['jquery', 'math'], function ($, math) {
+    var sum = math.add(10, 20);
+    $("#sum").html(sum);
+});
+```
+
+#### CMD和sea.js
+
+`require.js`在声明依赖的模块时会在第一时间加载并执行模块内的代码
+
+```javascript
+define(["a", "b", "c", "d", "e", "f"], function (a, b, c, d, e, f) {
+    // 等于在最前面声明并初始化了要用到的所有模块
+    if (false) {
+        // 即便没用到某个模块 b，但 b 还是提前执行了
+        b.foo()
+    }
+});
+```
+
+CMD是另一种js模块化方案，与AMD类似，但是AMD推崇依赖前置、提前执行，而CMD推崇依赖就近、延迟执行
+
+```javascript
+/** AMD写法 **/
+define(["a", "b", "c", "d", "e", "f"], function (a, b, c, d, e, f) {
+    // 等于在最前面声明并初始化了要用到的所有模块
+    a.doSomething();
+    if (false) {
+        // 即便没用到某个模块 b，但 b 还是提前执行了
+        b.doSomething()
+    }
+});
+
+/** CMD写法 **/
+define(function (require, exports, module) {
+    var a = require('./a'); //在需要时申明
+    a.doSomething();
+    if (false) {
+        var b = require('./b');
+        b.doSomething();
+    }
+});
+
+/** sea.js **/
+// 定义模块 math.js
+define(function (require, exports, module) {
+    var $ = require('jquery.js');
+    var add = function (a, b) {
+        return a + b;
+    }
+    exports.add = add;
+});
+// 加载模块
+seajs.use(['math.js'], function (math) {
+    var sum = math.add(1 + 2);
+});
+```
+
+#### ESM
+
+ES6 在语言标准的层面上实现了模块化的功能，而且相当简单。模块功能主要由`export`和`import`两个命令构成。`export`命令用于规定模块的对外接口，`import`命令用于输入其它模块提供的功能
+
+```javascript
+/** 定义模块 math.js **/
+let basicNum = 0;
+let add = function (a, b) {
+    return a + b;
+};
+export { basicNum, add };
+
+/** 引用模块 **/
+import { basicNum, add } from './math';
+
+function test() {
+    console.log(add(99 + basicNum));
+}
+test();
+```
+
+使用import命令时，开发者需要知道所要加载的变量名或函数名。ES6还提供了`export default`命令，为模块指定默认输出，对应的`import`语句就不需要使用花括号
+
+```javascript
+/** export default **/
+//定义输出
+export default { basicNum, add };
+//引入
+import math from './math';
+function test(ele) {
+    ele.textContent = math.add(99 + math.basicNum);
+}
+```
+
+ES6的模块不是对象，`import`命令会被JavaScript·引擎静态分析，在编译时就引入模块代码，而不是在代码运行时加载，所以无法实现条件加载，但是可以静态分析。
+
+#### 总结
+
++ AMD和CMD
+
+  + 都使用`define`定义模块，`require`加载模块
+
+  + AMD是异步加载，模块的加载不会影响后面语句的运行，所有依赖这个模块的语句都被定义在一个回调函数中
+
+  + CMD是需要时加载
+
+  + AMD推崇依赖前置、提前执行，就算某个模块没有被用到，也会被执行
+
+    CMD推崇依赖就近、延迟执行
+
++ CommonJS模块输出值的拷贝，ES6输出值的引用
+
+  + CommonJS模块输出的是值的浅拷贝，也就是说如果基本数据类型的值发生改变，模块内部的变化不会影响这个值
+
+    但是引用数据类型的数据会被影响到
+
+  + ES6模块的运行机制与CommonJS不同，JS引擎对脚本静态分析时，遇到模块加载命令`import`就会生成一个只读的引用。等到脚本真正执行时，再根据这个只读引用，到被加载到模块里面去取值。ES6的`import`如果原始值发生改变，`import`加载的值也会改变。ES6模块是动态引用，不会缓存值，模块里面的变量绑定了其所在的模块
+
+```javascript
+let count = { val: 1 };
+let shallow = 1;
+
+setCount = () => {
+    count.val++;
+    shallow++;
+}
+
+setTimeout(() => {
+    console.log('count.val', count.val)// a 2
+    console.log('shallow', shallow);
+}, 1000);
+
+module.exports = {
+    count,
+    shallow,
+    setCount
+}
+
+const obj = require('./math.js');
+
+obj.setCount();// count=2
+
+console.log('b', obj.count.val)// b 2
+console.log('shallow', obj.shallow);// shallow 1
+
+setTimeout(() => {
+    console.log('b next', obj.count);
+}, 2000);
+```
+
++ CommonJS运行时加载，ES6模块编译时输出接口
+
+  + 运行时加载：CommonJS模块就是对象，在输入时先加载整个模块，生成一个对象，然后从这个对象上读取方法
+  + 编译时加载：ES6模块不是对象，而是通过`export`命令显式的指定输出的代码，`import`时使用静态命令的形式。在`import`时可以指定加载某个输出值，而不是加载整个模块
+
+  CommonJS加载的是一个对象(`module.exports`属性)，该对象只有在脚本运行完才会生成。而ES6模块不是对象，它的对外接口只是一种静态定义，在代码静态解析阶段就会生成。
+
 ### 原型和原型链
 
 每个构造函数constructor都有一个原型对象prototype，原型对象都包含一个指向构造函数的指针，而实例instance都包含一个指向原型对象是内部指针
@@ -969,108 +1299,6 @@ Child.prototype.constructor = Child;
 var arzhChild = new Child("red");
 console.log(arzhChild.name); // 'arzh'
 ```
-
-### CommonJS
-
-#### require
-
-Nodejs遵循CommonJS规范，使用require关键字加载模块
-
-#### require重复引入的问题
-
-在使用require引入模块时，多个代码文件多次引入相同的模块会不会造成重复？
-
-Nodejs中默认先从缓存中加载模块，一个模块被加载一次之后，就会在缓存中维持一个副本，如果遇到重复加载的模块会直接提取缓存中的副本，在任何时候每个模块只在缓存中有一个实例
-
-#### require同步加载模块
-
-同步
-
-+ 一个作为公共依赖的模块，最好一次性加载出来，同步更好
-+ 模块的个数是有限的，而且Nodejs在require时会自动缓存已经加载的模块，再加上访问的都是本地文件，IO开销可以忽略
-
-#### require的缓存策略
-
-Nodejs会自动缓存require引入的文件，下次再引入不需要经过文件系统而是直接从缓存读取
-
-不过这种缓存式经过文件路径定位的，即使两个完全相同的文件，位于不同路径下，也会在缓存中维持两份
-
-```javascript
-// 可以通过以下获取缓存中的文件
-console.log(require.cache)
-```
-
-#### exports与module.exports的区别
-
-##### js文件启动时
-
-node执行一个文件时，会给这个文件生成一个exports和module对象，module有一个exports属性
-
-```javascript
-exports = module.exports = {};
-```
-
-##### require加载模块
-
-```javascript
-//koala.js
-let a = '程序员成长指北';
-
-console.log(module.exports); //能打印出结果为：{}
-console.log(exports); //能打印出结果为：{}
-
-exports.a = '程序员成长指北哦哦'; //这里辛苦劳作帮 module.exports 的内容给改成 {a : '程序员成长指北哦哦'}
-
-exports = '指向其他内存区'; //这里把exports的指向指走
-
-//test.js
-
-const a = require('/koala');
-console.log(a) // 打印为 {a : '程序员成长指北哦哦'}
-```
-
-require导出的内容是module.exports指向的内存，不是exports的
-
-#### 实际例子
-
-```javascript
-// ./a.js
-let count = 1;
-
-setCount = () => {
-    count++;
-}
-
-setTimeout(() => {
-    console.log('a', count)// a 2
-}, 1000);
-
-module.exports = {
-    count,
-    setCount
-}
-
-//b.js
-const obj = require('./a.js');
-
-obj.setCount();// count=2
-
-console.log('b', obj.count)// b 1
-
-setTimeout(() => {
-    console.log('b next', obj.count);
-}, 2000);
-```
-
-+ 运行b模块时，先加载a模块，会执行setTimeout，到时间后把回调函数扔进宏任务队列
-
-+ 调用setCount，这里注意，setCount内部改变的是a模块内部的count变量，因为count是普通类型，导出的是count的拷贝，因此即使将count增1，输出仍为1
-
-+ 执行setTimeout，扔进队列
-
-+ 执行a模块中的回调，输出count为2，因为setCount被调用了
-
-+ 执行b模块中的回调，输出count为1，没有发生改变
 
 ### 垃圾回收GC
 
