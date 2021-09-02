@@ -152,7 +152,7 @@ prefetch叫链接预取，是一种浏览器机制，利用浏览器空闲时间
 </head>
 ```
 
-通过prefetch预取到资源后，如果页面中需要再次请求改资源，network也会增加一次新的访问请求，但是请求status虽然也是200，却有一个特殊标记—prefetch cache，表明请求来自prefetch缓存
+通过prefetch预取到资源后，如果页面中需要再次请求该资源，network也会增加一次新的访问请求，但是请求status虽然也是200，却有一个特殊标记—prefetch cache，表明请求来自prefetch缓存
 
 #### preload
 
@@ -179,7 +179,7 @@ rel属性为preload能够让我们在HTML页面中元素内部书写一些声明
 
 + preload声明当前页面的关键资源，强制浏览器尽快加载，prefetch声明将来可能用到的资源，在浏览器空闲时加载
 
-+ preload记载字体资源时必须设置crossorigin属性，否则会导致重复向服务器请求
++ preload加载字体资源时必须设置crossorigin属性，否则会导致重复向服务器请求
 
   如果不设置crossorigin属性，浏览器会采用匿名模式CORS去preload，导致两次请求无法共用缓存
 
