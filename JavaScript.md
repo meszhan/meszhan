@@ -2,6 +2,202 @@
 
 ## 语法型面试题
 
+### `Promise`
+
+#### `then`的链式调用
+
+`then`方法是`Promise`原型上的一个方法，返回一个`Promise`实例，接收两个回调参数：`onReslved`或`onRejected`，这两个回调函数的参数分别为执行成功的数据`value`和执行失败的理由`reason`
+
+```javascript
+new Promise((resolve, reject) => {
+	resolve('成功了');
+}).then((data) => {
+	// 这里的data就是 异步请求成功后 resolve接收到的值
+	console.log('success: ', data); // output: success: 成功了
+})
+
+new Promise((resolve, reject) => {
+	reject('success');
+}).then(
+(data) => {	console.log('success: ', data);},
+(err) => { console.log('failed: ', err);}
+)
+```
+
+如果上一次`then`处理不返回数据，则下一次`then`处理默认接受一个`undefined`作为`value`或`reason`
+
+```javascript
+new Promise((resolve, reject) => {
+  resolve("成功了");
+  // reject('失败了')
+})
+  .then(
+    (data) => {
+      console.log("onResolved1", data);
+    },
+    (error) => {
+      console.log("onRejected1", error);
+    }
+  )
+  .then(
+    (data) => {
+      console.log("onResolved2", data);// onResolved undefined
+    },
+    (error) => {
+      console.log("onRejected2", error);
+    }
+  );
+```
+
+如果想要链式传递数据，那么上一次`then`处理中的回调函数`onResolved`或`onRejected`必须有返回值
+
+```javascript
+new Promise((resolve, reject) => {
+  resolve("成功了");
+  // reject('失败了')
+})
+  // 直接写.then部分了:
+  .then((data) => {
+    console.log("onResolved1", data);
+    // 情况1: 返回固定值
+    return "success";
+    // 情况2: 返回promise
+    return new Promise((resolve, reject) => {
+      resolve(data);
+    });
+  })
+  .then(
+    (data) => {
+      console.log("onResolved2", data);
+    },
+    (error) => {
+      console.log("onRejected2", error);
+    }
+  );
+```
+
+如何判断`then`处理中会调用哪个回调函数
+
+```javascript
+// 现在执行失败:
+const p = new Promise((resolve, reject) => {
+  reject("失败了");
+}).then(
+  (data) => {
+    console.log("onResolved1", data);
+  },
+  (error) => {
+    // 场景1: 没有return
+    console.log("onRejected1", error);
+    // 场景2: return 固定值
+    return "failed";
+    // 场景3: return Promise.reject
+    return Promise.reject(error);
+    // 场景4: return Promise.resolve
+    return Promise.resolve(error);
+    // 场景5: 抛出错误:
+    throw error;
+  }
+);
+p.then(
+  (data) => {
+    console.log("onResolved2", data);
+  },
+  (error) => {
+    console.log("onRejected2", error);
+  }
+);
+```
+
+在`then`处理中，只有当显式的在`onResolved`或`onRejected`函数中返回一个`rejected`状态的`Promise`实例或通过`throw`抛出一个错误，才会执行下一次`then`处理的`onRejected`回调函数
+
+#### `Promise`异常穿透
+
+在`then`处理中，一般不传入`onRejected`，将处理失败的数据放在最后的`catch`中
+
+````javascript
+// 现在执行失败:
+new Promise((resolve, reject) => {
+  reject("失败了");
+})
+  .then((data) => {
+    console.log("onResolved1", data);
+  })
+  .then((data) => {
+    console.log("onResolved2", data);
+  })
+  .then((data) => {
+    console.log("onResolved3", data);
+  })
+  .catch((err) => {
+    console.log("onRejected1", err);
+  });
+````
+
+一开始`reject`就接收了失败的数据，而数据最终也会通过`catch`中的回调函数进行处理。
+
+失败的`err`是通过链式调用一层层进行传递，但是因为`then`处理中并没有关于失败的回调，但其实是因为如果不传递第二个`onRejected`函数，会默认
+
+```javascript
+.then(
+(data) => { ...处理data },
+// 不写第二个参数, 相当于默认传了:
+(err) => Promise.reject(err), 
+// 或
+(err) => { throw err; }
+).then()
+```
+
+#### 中断`Promise`
+
+如果想中断`Promise`的链式操作
+
+```javascript
+.catch((err) => {
+  console.log('onRejected', err);
+  // 中断promise链:
+  return new Promise(() => {})
+})
+```
+
+只需要在回调中返回一个状态一直为`pending`的`Promise`实例即可，因为一直为`pending`，所以无法继续触发以下的任何`then`处理
+
+#### `finally`
+
+不管`Promise`的状态是`resolved`还是`rejected`，传递到`finally`方法的回调函数`onFinally`都会被执行。我们可以将一些公共行为放在`onFinally`中执行，`onFinally`不会接受任何参数，因为它不关心`Promise`实例的状态
+
+```javascript
+p.finally(function() {
+   // settled (fulfilled or rejected)
+});
+```
+
+`finally`方法也会返回一个新的`Promise`实例，这个新的`Promise`实例的状态取决于`onFinally`返回什么，以及`onFinally`中是否抛出异常，基本与`then`方法的返回值相同
+
+#### `Promise`和`jQuery`链式调用的区别
+
+`then`、`catch`和`finally`方法都会产生一个新的`Promise`实例并返回，所以实际上链式调用的实例已经发生了变化
+
+```javascript
+Promise.prototype.then = function () {
+  // balabala
+  return new Promise((resolve, reject) => {
+    // if balabala
+    // else if balabala
+    // else balabala
+  });
+};
+```
+
+`jQuery`链式调用工基于同一个`jQuery`实例
+
+```javascript
+jQuery.fn.css = function() {
+  // balabala
+  return this;
+}
+```
+
 ### AMD、CMD、CommonJS和ESM
 
 模块化的开发方式可以提高代码的复用率，方便进行代码的管理。通常一个文件就是一个模块，有自己的作用域，只会向外暴露特定的变量和函数。
